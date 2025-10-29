@@ -1,0 +1,119 @@
+/*3 portate più prese*/
+
+SELECT cc.nome_portata, SUM(cc.quantità) as quantità_venduta, SUM(p.prezzo * cc.quantità) as entrate_totali
+FROM "189632_simone".Contenuto_Comanda cc
+INNER JOIN "189632_simone".Portata p ON cc.nome_portata = p.nome_portata
+GROUP BY cc.nome_portata
+ORDER BY quantità_venduta DESC LIMIT 3;
+
+/*num prenotazioni, comande per mese con prezzo medio ordine*/
+
+SELECT 
+    EXTRACT(MONTH FROM p.data_ora) AS mese,
+    COUNT(DISTINCT p.Id_prenotazione) AS prenotazioni_totali,
+    COUNT(DISTINCT c.id_comanda) AS ordini_totali,
+    ROUND(AVG(c.prezzo_totale), 2) AS prezzo_medio_ordine
+FROM 
+	"189632_simone".Prenotazioni p
+LEFT JOIN 
+    "189632_simone".Comande c ON p.data_ora = c.data_ora AND p.Id_tavolo = c.id_tavolo
+GROUP BY 
+    EXTRACT(MONTH FROM p.data_ora)
+ORDER BY 
+    mese;
+
+
+/*Calcolare il ricavo giornaliero e piatti, bevande, birre prese per giornali*/
+
+
+SELECT 
+    DATE(c.Data_ora) AS giorno,--raggruppo solo per data senza orario
+    SUM(c.prezzo_totale) AS ricavo_totale,
+    SUM((SELECT SUM(cc2.quantità) 
+         FROM "189632_simone".Contenuto_Comanda cc2 
+         JOIN "189632_simone".Portata p2 ON cc2.nome_portata = p2.nome_portata 
+         WHERE cc2.id_comanda = c.id_comanda AND p2.sel = 'cibi')) AS numero_piatti,
+    SUM((SELECT SUM(cc2.quantità) 
+         FROM "189632_simone".Contenuto_Comanda cc2 
+         JOIN "189632_simone".Portata p2 ON cc2.nome_portata = p2.nome_portata 
+         WHERE cc2.id_comanda = c.id_comanda AND p2.sel = 'bevande')) AS numero_bevande,
+    SUM((SELECT SUM(cc2.quantità) 
+         FROM "189632_simone".Contenuto_Comanda cc2 
+         JOIN "189632_simone".Portata p2 ON cc2.nome_portata = p2.nome_portata 
+         WHERE cc2.id_comanda = c.id_comanda AND p2.sel = 'birra')) AS numero_birre
+FROM 
+    "189632_simone".Comande c
+GROUP BY 
+    DATE(c.Data_ora)
+ORDER BY 
+    giorno DESC;
+
+/*Calcolare il totale delle vendite per ogni tipo di birra, includendo entrambi i formati (33cl e 50cl):*/
+
+SELECT p.tipo_birra, 
+       SUM(c.quantità) as totale_birre_vendute,
+       SUM(c.quantità * p.prezzo) as ricavo_totale
+FROM "189632_simone".Contenuto_Comanda c
+JOIN "189632_simone".Portata p ON c.nome_portata = p.nome_portata
+WHERE p.sel = 'birra'
+GROUP BY p.tipo_birra
+HAVING p.tipo_birra IS NOT NULL
+ORDER BY ricavo_totale desc;
+
+
+/*TRIGGER STOCK*/
+
+-- creo una funzione trigger che eseguo quando inserisco un nuovo record in contenuto comanda
+CREATE OR REPLACE FUNCTION update_stock_on_insert()
+RETURNS TRIGGER AS $$
+DECLARE -- variabili necessarie nel ciclo for
+    var_nome_ingrediente text;
+    total_usata numeric; 
+BEGIN
+	--per ogni riga risultante dalla query assegno nome dell'ingrediente a var_nome_ingrediente e la quantità totale a total usata
+    FOR var_nome_ingrediente, total_usata IN (
+        select nome_ingrediente, SUM(quantità_ingrediente) as total_usata-- somma ingredienti tot usati 
+		from( -- somma ingredienti per portata, non serve group by perche se ordino la stessa portata n volte ho solo un record con quantinta uguale a n
+				SELECT u.nome_ingrediente, u.nome_portata, u.quantità_usata * cc.quantità as quantità_ingrediente
+				FROM "189632_simone".usati u
+				JOIN "189632_simone".contenuto_comanda cc ON u.nome_portata = cc.nome_portata
+				WHERE cc.id_comanda = 29--calcolo la quantità totale di ciascun ingrediente richiesto
+		) 
+		GROUP BY nome_ingrediente
+    )
+	--aggiorno tabella stock
+    LOOP
+        UPDATE "189632_simone".stock
+        SET quantità_stock = quantità_stock - total_usata
+        WHERE nome_ingrediente = var_nome_ingrediente
+		and id_magazzino = (select id_magazzino
+							from "189632_simone".stock
+							where nome_ingrediente = var_nome_ingrediente  
+							limit 1);
+    END LOOP;
+
+    RETURN NEW;--restituisco la nuova riga inserita
+END;
+$$ LANGUAGE plpgsql;
+
+-- condizione eseguo quando inserisco un nuovo record in contenuto comanda
+CREATE OR REPLACE TRIGGER update_stock_after_insert
+AFTER INSERT ON "189632_simone".contenuto_comanda
+FOR EACH ROW
+EXECUTE FUNCTION update_stock_on_insert();
+
+-- controllo se lo stock va negativo se si blocco la comanda
+CREATE OR REPLACE FUNCTION check_stock_quantity()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.quantità_stock < 0 THEN
+        RAISE EXCEPTION 'la quantità di Stock non può essere negativa per %', NEW.nome_ingrediente;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;-- utilizzato per delimitare una funzione di sql.
+--condizione che si attiva il controllo prima dell'aggiornamento nella tabella stock
+CREATE OR REPLACE TRIGGER prevent_negative_stock
+BEFORE UPDATE ON "189632_simone".Stock
+FOR EACH ROW
+EXECUTE FUNCTION check_stock_quantity();

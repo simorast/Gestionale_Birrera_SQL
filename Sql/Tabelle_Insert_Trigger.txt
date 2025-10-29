@@ -1,0 +1,490 @@
+
+CREATE SCHEMA IF NOT EXISTS "189632_simone"
+    AUTHORIZATION postgres;
+
+COMMENT ON SCHEMA "189632_simone"
+    IS 'standard public schema';
+
+GRANT ALL ON SCHEMA "189632_simone" TO PUBLIC;
+
+GRANT ALL ON SCHEMA "189632_simone" TO postgres;
+
+set search_path to "189632_simone";
+
+--CREO TABELLE
+DROP TABLE IF EXISTS Contenuto_Comanda CASCADE;
+DROP TABLE IF EXISTS Comande CASCADE;
+DROP TABLE IF EXISTS Usati CASCADE;
+DROP TABLE IF EXISTS Portata CASCADE;
+DROP TABLE IF EXISTS Prenotazioni CASCADE;
+DROP TABLE IF EXISTS Tavolo CASCADE;
+DROP TABLE IF EXISTS Stock CASCADE;
+DROP TABLE IF EXISTS Ingrediente CASCADE;
+DROP TABLE IF EXISTS Magazzino CASCADE;
+DROP TABLE IF EXISTS Dipendente CASCADE;
+
+-- Cliente (con clienti fedeltà e nuovi clienti)
+CREATE TABLE Dipendente(
+  Id_dipendente SERIAL PRIMARY KEY,
+  nome VARCHAR(50) NOT NULL,
+  cognome VARCHAR(50) NOT NULL 
+ );
+-- Tavolo (con capienza e disponibilità)
+CREATE TABLE Tavolo (
+  Id_tavolo SERIAL PRIMARY KEY,--quando si esegue un INSERT in una tabella con una colonna SERIAL, non è necessario specificare manualmente il valore dell'ID - PostgreSQL si occupa di generarlo automaticamente.
+  capienza INT NOT NULL,
+  tipo VARCHAR(20) NOT NULL
+);
+
+-- Prenotazione (associata a uno o più tavoli)  
+CREATE TABLE Prenotazioni (
+  Id_prenotazione SERIAL not null,
+  Data_ora TIMESTAMP(0) NOT NULL,--contiene data e ora
+  Id_tavolo INT NOT NULL,--Avendo dichiarato Id_tavolo come SERIAL nella tabella Tavolo, i valori generati saranno numeri interi, quindi è corretto utilizzare il tipo INT per la chiave straniera nella tabella Prenotazione.
+  numero_persone INT NOT NULL,
+  id_dipendente int,
+  PRIMARY KEY (Id_prenotazione),
+  FOREIGN KEY (Id_tavolo) REFERENCES Tavolo(Id_tavolo)
+);
+
+-- Creazione della tabella Comanda
+CREATE TABLE Comande (
+  id_comanda INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  id_dipendente int,
+  Data_ora TIMESTAMP(0) NOT NULL,--contiene data e ora
+  id_tavolo INT NOT NULL,
+  prezzo_totale int,
+  FOREIGN KEY (id_tavolo) REFERENCES Tavolo(id_tavolo),
+  CONSTRAINT comanda_ak UNIQUE (Data_ora, id_tavolo) -- Alternate Key
+);
+
+
+
+-- Portata (cibi, bevande e birre con dettagli)
+CREATE TABLE Portata (
+  nome_portata VARCHAR(100) PRIMARY KEY,
+  prezzo float NOT NULL,
+  sel VARCHAR(20) NOT NULL CHECK (sel IN ('cibi', 'bevande','birra')),
+  tipo_birra VARCHAR(50)
+);
+-- Contenuto Comanda (relazione molti a molti tra Comanda e Portata)
+CREATE TABLE Contenuto_Comanda (
+  id_comanda INT NOT NULL,
+  nome_portata VARCHAR(100) NOT NULL,
+  quantità INT NOT NULL,--almeno una
+  PRIMARY KEY (id_comanda, nome_portata),
+  FOREIGN KEY (id_comanda) REFERENCES Comande(id_comanda),
+  FOREIGN KEY (nome_portata) REFERENCES Portata(nome_portata)
+);	
+
+-- Ingrediente (utilizzati nelle portate)
+CREATE TABLE Ingrediente (
+  nome_ingrediente VARCHAR(100) PRIMARY KEY
+);
+
+-- Usati (relazione molti a molti tra Portata e Ingrediente)
+CREATE TABLE Usati (
+  nome_portata VARCHAR(100) NOT NULL,
+  nome_ingrediente VARCHAR(100) NOT NULL,
+  quantità_usata float NOT NULL,
+  PRIMARY KEY (nome_portata, nome_ingrediente),
+  FOREIGN KEY (nome_portata) REFERENCES Portata(nome_portata),
+  FOREIGN KEY (nome_ingrediente) REFERENCES Ingrediente(nome_ingrediente)
+);
+
+-- Magazzino (informazioni sul magazzino)
+CREATE TABLE Magazzino (
+  id_magazzino SERIAL PRIMARY KEY,
+  piano INT NOT NULL
+);
+
+-- Stock (tracciando la disponibilità degli ingredienti)
+CREATE TABLE Stock (
+  nome_ingrediente VARCHAR(100),
+  quantità_stock float NOT NULL,
+  id_magazzino int NOT NULL,
+  PRIMARY KEY(id_magazzino, nome_ingrediente),
+  FOREIGN KEY (nome_ingrediente) REFERENCES Ingrediente(nome_ingrediente),
+  FOREIGN KEY (id_magazzino) REFERENCES Magazzino(id_magazzino)
+);
+
+
+/*TRIGGER STOCK*/
+
+-- creo una funzione trigger che eseguo quando inserisco un nuovo record in contenuto comanda
+CREATE OR REPLACE FUNCTION update_stock_on_insert()
+RETURNS TRIGGER AS $$
+DECLARE -- variabili necessarie nel ciclo for
+    var_nome_ingrediente text;
+    total_usata numeric; 
+BEGIN
+	--per ogni riga risultante dalla query assegno nome dell'ingrediente a var_nome_ingrediente e la quantità totale a total usata
+    FOR var_nome_ingrediente, total_usata IN (
+        select nome_ingrediente, SUM(quantità_ingrediente) as total_usata-- somma ingredienti tot usati 
+		from( -- somma ingredienti per portata, non serve group by perche se ordino la stessa portata n volte ho solo un record con quantinta uguale a n
+				SELECT u.nome_ingrediente, u.nome_portata, u.quantità_usata * cc.quantità as quantità_ingrediente
+				FROM "189632_simone".usati u
+				JOIN "189632_simone".contenuto_comanda cc ON u.nome_portata = cc.nome_portata
+				WHERE cc.id_comanda = 29--calcolo la quantità totale di ciascun ingrediente richiesto
+		) 
+		GROUP BY nome_ingrediente
+    )
+	--aggiorno tabella stock
+    LOOP
+        UPDATE "189632_simone".stock
+        SET quantità_stock = quantità_stock - total_usata
+        WHERE nome_ingrediente = var_nome_ingrediente
+		and id_magazzino = (select id_magazzino
+							from "189632_simone".stock
+							where nome_ingrediente = var_nome_ingrediente  
+							limit 1);
+    END LOOP;
+
+    RETURN NEW;--restituisco la nuova riga inserita
+END;
+$$ LANGUAGE plpgsql;
+
+-- condizione eseguo quando inserisco un nuovo record in contenuto comanda
+CREATE OR REPLACE TRIGGER update_stock_after_insert
+AFTER INSERT ON "189632_simone".contenuto_comanda
+FOR EACH ROW
+EXECUTE FUNCTION update_stock_on_insert();
+
+-- conteollo se lo stock va negativo se si blocco la comanda
+CREATE OR REPLACE FUNCTION check_stock_quantity()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.quantità_stock < 0 THEN
+        RAISE EXCEPTION 'la quantità di Stock non può essere negativa per %', NEW.nome_ingrediente;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;-- utilizzato per delimitare una funzione di sql.
+--condizione che si attiva il controllo prima dell'aggiornamento nella tabella stock
+CREATE OR REPLACE TRIGGER prevent_negative_stock
+BEFORE UPDATE ON "189632_simone".Stock
+FOR EACH ROW
+EXECUTE FUNCTION check_stock_quantity();
+
+
+--INSERISCO I DATI
+INSERT INTO Dipendente (nome, cognome)
+VALUES
+('Mario', 'Rossi'),
+('Luigi', 'Bianchi'),
+('Giovanni', 'Verdi'),
+('Sara', 'Neri'),
+('Anna', 'Gialli'),
+('Paolo', 'Blu'),
+('Francesca', 'Marroni'),
+('Simone', 'Grigi');
+
+
+-- 3 tavoli da 2 posti fuori
+INSERT INTO Tavolo (capienza, tipo)
+VALUES
+  (2, 'fuori'),
+  (2, 'fuori'),
+  (2, 'fuori');
+
+
+-- 4 tavoli da 4 posti fuori
+INSERT INTO Tavolo (capienza, tipo)
+VALUES
+  (4, 'fuori'),
+  (4, 'fuori'), 
+  (4, 'fuori'),
+  (4, 'fuori'),
+  (8, 'fuori'),
+  (8, 'fuori');
+
+-- 5 tavoli da 2 posti dentro
+INSERT INTO Tavolo (capienza, tipo)
+VALUES
+  (2, 'dentro'),
+  (2, 'dentro'),
+  (2, 'dentro'),
+  (2, 'dentro'),
+  (2, 'dentro');
+
+-- 8 tavoli da 4 posti dentro
+INSERT INTO Tavolo (capienza, tipo)
+VALUES
+  (4, 'dentro'),
+  (4, 'dentro'),
+  (4, 'dentro'),
+  (4, 'dentro'),
+  (4, 'dentro'),
+  (4, 'dentro'), 
+  (4, 'dentro'),
+  (4, 'dentro'),
+  (8, 'dentro'),
+  (8, 'dentro');
+
+
+-- Inserimento dati completi nella tabella Prenotazione
+INSERT INTO Prenotazioni (Data_ora, Id_tavolo, numero_persone, id_dipendente)
+VALUES
+  ('2024-01-15 19:00:00', 1, 2, 1),
+  ('2024-01-22 20:00:00', 2, 2, 2),
+  ('2024-02-05 18:30:00', 3, 2, 3),
+  ('2024-02-12 19:30:00', 4, 2, 4),
+  ('2024-02-19 20:00:00', 5, 2, 5),
+  ('2024-03-04 19:00:00', 6, 2, 6),
+  ('2024-03-11 18:30:00', 7, 2, 7),
+  ('2024-03-18 20:00:00', 8, 2, 8),
+  ('2024-04-01 19:30:00', 9, 2, 4),
+  ('2024-04-08 19:00:00', 10, 2, 1),
+  ('2024-04-15 20:00:00', 11, 2, 1),
+  ('2024-04-22 18:30:00', 12, 2, 1),
+  ('2024-05-01 19:00:00', 13, 2, 3),
+  ('2024-05-10 20:00:00', 14, 2, 8),
+  ('2024-05-15 18:30:00', 15, 2, 7),
+  
+  
+  ('2024-03-05 20:15:00', 1, 4, 1),
+  ('2024-04-02 18:45:00', 2, 2, 2),
+  ('2024-03-07 19:15:00', 3, 2, 3),
+  ('2024-04-10 20:30:00', 4, 4, 4),
+  ('2024-02-20 19:50:00', 5, 4, 5),
+  ('2024-03-15 18:40:00', 6, 2, 6),
+  ('2024-04-05 20:10:00', 7, 4, 7),
+  ('2024-03-10 19:25:00', 8, 2, 8),
+  
+  -- piu di 3 prenotazioni
+
+  ('2024-05-02 20:20:00', 1, 2, 1),
+  ('2024-04-20 19:05:00', 2, 4, 2),
+  ('2024-05-10 18:55:00', 3, 4, 3);
+
+
+
+
+INSERT INTO Portata (nome_portata, prezzo, sel, tipo_birra)
+VALUES
+  -- Cibi
+  ('Classic Burger', 8.00, 'cibi', NULL),
+  ('Veggie Dream', 7.50, 'cibi', NULL),
+  ('Classic Dog', 6.50, 'cibi', NULL),
+  ('Classiche', 4.00, 'cibi', NULL),
+
+  -- Birre (alla spina)
+  ('Pilsner Light 33cl', 4.50, 'birra', 'Lager chiara'),
+  ('Pilsner Light 50cl', 5.50, 'birra', 'Lager chiara'),
+  ('Stout Dream 33cl', 6.00, 'birra', 'Birra scura al caffè'),
+  ('Stout Dream 50cl', 7.00, 'birra', 'Birra scura al caffè'),
+  ('Weiss Sun 33cl', 5.50, 'birra', 'Birra di frumento'),
+  ('Weiss Sun 50cl', 6.50, 'birra', 'Birra di frumento'),
+
+  -- Bevande (alla spina)
+  ('Coca-Cola 33cl', 2.50, 'bevande', NULL),
+  ('Coca-Cola 50cl', 3.50, 'bevande', NULL),
+  ('Fanta 33cl', 2.50, 'bevande', NULL),
+  ('Fanta 50cl', 3.50, 'bevande', NULL),
+
+  -- Acqua (non alla spina, capacità standard)
+  ('Acqua Naturale 33cl', 1.50, 'bevande', NULL),
+  ('Acqua Frizzante 33cl', 1.50, 'bevande', NULL);
+
+INSERT INTO Ingrediente (nome_ingrediente)
+VALUES 
+  -- Classic Burger ingredients
+  ('Hamburger di manzo'),
+  ('Insalata'),
+  ('Pomodoro'),
+  ('Cheddar'),
+  ('Salsa speciale'),
+  ('Burger vegetariano'),
+  ('Wurstel di maiale'),
+  ('Senape'),
+  ('Ketchup');
+
+INSERT INTO Ingrediente (nome_ingrediente)
+VALUES 
+  -- Ingredienti per Birre alla spina
+  ('Birra Pilsner alla spina'),
+  ('Birra Stout alla spina'),
+  ('Birra Weiss alla spina'),
+  
+  -- Bevande
+  ('Coca-Cola alla spina'),
+  ('Fanta alla spina'),
+  
+  ('Acqua naturale 33cl'),
+  ('Acqua frizzante 33cl');
+
+-- Inserisci nella tabella Usati
+INSERT INTO Usati (nome_portata, nome_ingrediente, quantità_usata)
+VALUES 
+  -- Birre alla spina
+  ('Pilsner Light 33cl', 'Birra Pilsner alla spina', 0.33),
+  ('Pilsner Light 50cl', 'Birra Pilsner alla spina', 0.50),
+  
+  ('Stout Dream 33cl', 'Birra Stout alla spina', 0.33),
+  ('Stout Dream 50cl', 'Birra Stout alla spina', 0.50),
+  
+  ('Weiss Sun 33cl', 'Birra Weiss alla spina', 0.33),
+  ('Weiss Sun 50cl', 'Birra Weiss alla spina', 0.50),
+  
+  -- Bevande alla spina
+  ('Coca-Cola 33cl', 'Coca-Cola alla spina', 0.33),
+  ('Coca-Cola 50cl', 'Coca-Cola alla spina', 0.50),
+  
+  ('Fanta 33cl', 'Fanta alla spina', 0.33),
+  ('Fanta 50cl', 'Fanta alla spina', 0.50),
+  ('Acqua Naturale 33cl', 'Acqua naturale 33cl', 1),
+  ('Acqua Frizzante 33cl', 'Acqua frizzante 33cl', 1),
+    -- Classic Burger ingredients
+  ('Classic Burger', 'Hamburger di manzo', 0.2),
+  ('Classic Burger', 'Insalata', 0.1),
+  ('Classic Burger', 'Pomodoro', 0.1),
+  ('Classic Burger', 'Cheddar', 0.05),
+  ('Classic Burger', 'Salsa speciale', 0.02),
+  
+  -- Veggie Dream ingredients
+  ('Veggie Dream', 'Burger vegetariano', 0.2),
+  ('Veggie Dream', 'Insalata', 0.1),
+  ('Veggie Dream', 'Pomodoro', 0.1),
+  ('Veggie Dream', 'Cheddar', 0.05),
+  ('Veggie Dream', 'Salsa speciale', 0.02),
+  
+  -- Classic Dog ingredients
+  ('Classic Dog', 'Wurstel di maiale', 0.15),
+  ('Classic Dog', 'Senape', 0.02),
+  ('Classic Dog', 'Ketchup', 0.02),
+  ('Classic Dog', 'Insalata', 0.05);
+
+
+INSERT INTO Comande (Data_ora, id_tavolo, prezzo_totale, id_dipendente)
+VALUES 
+  ('2024-01-15 19:00:00', 1, 21.00, 1),
+  ('2024-01-22 20:00:00', 2, 12.00, 2),
+  ('2024-02-05 18:30:00', 3, 19.00, 3),
+  ('2024-02-12 19:30:00', 4, 42.00, 4),
+  ('2024-02-19 20:00:00', 5, 22.00, 5),
+  ('2024-03-04 19:00:00', 6, 38.00, 6),
+  ('2024-03-11 18:30:00', 7, 39.00, 7),
+  ('2024-03-18 20:00:00', 8, 38.00, 8),
+  ('2024-04-01 19:30:00', 9, 12.00, 1),
+  ('2024-04-08 19:00:00', 10, 42.00, 2),
+  ('2024-04-15 20:00:00', 11, 38.00, 3),
+  ('2024-04-22 18:30:00', 12, 19.00, 4),
+  ('2024-05-01 19:00:00', 13, 13.00, 5),
+  ('2024-05-10 20:00:00', 14, 38.00, 6),
+  ('2024-05-15 18:30:00', 15, 12.00, 7),
+  ('2024-02-15 19:45:00', 16, 13.00, 8),
+  ('2024-03-05 20:15:00', 1, 38.00, 1),
+  ('2024-04-02 18:45:00', 2, 12.00, 2),
+  ('2024-03-07 19:15:00', 3, 13.00, 3),
+  ('2024-04-10 20:30:00', 4, 38.00, 4),
+  ('2024-02-20 19:50:00', 5, 19.00, 5),
+  ('2024-03-15 18:40:00', 6, 38.00, 6),
+  ('2024-04-05 20:10:00', 7, 38.00, 7),
+  ('2024-03-10 19:25:00', 8, 12.00, 8),
+  ('2024-05-05 18:55:00', 9, 12.00, 1),
+  ('2024-04-10 19:35:00', 10, 13.00, 2),
+  ('2024-05-01 20:05:00', 11, 38.00, 3),
+  ('2024-04-15 18:50:00', 12, 12.00, 4);
+
+
+
+-- Inserimento Contenuto_Comanda - Piatti principali
+INSERT INTO Contenuto_Comanda (id_comanda, nome_portata, quantità)
+VALUES 
+  (1, 'Classic Burger', 1),
+  (2, 'Veggie Dream', 1),
+  (3, 'Classic Dog', 1),
+  (4, 'Classic Burger', 1),
+  (5, 'Veggie Dream', 1),
+  (6, 'Classic Burger', 2),
+  (7, 'Classic Dog', 2),
+  (8, 'Veggie Dream', 2),
+  (9, 'Classic Burger', 1),
+  (10, 'Classic Dog', 2),
+  (11, 'Classic Burger', 2),
+  (12, 'Veggie Dream', 1),
+  (13, 'Classic Dog', 1),
+  (14, 'Classic Burger', 2),
+  (15, 'Veggie Dream', 1),
+  (16, 'Classic Burger', 1),
+  (17, 'Classic Dog', 2),
+  (18, 'Veggie Dream', 1),
+  (19, 'Classic Burger', 1),
+  (20, 'Classic Dog', 2),
+  (21, 'Classic Burger', 2),
+  (22, 'Veggie Dream', 1),
+  (23, 'Classic Dog', 2),
+  (24, 'Classic Burger', 1),
+  (25, 'Veggie Dream', 1),
+  (26, 'Classic Burger', 2),
+  (27, 'Classic Dog', 2);
+-- Inserimento Contenuto_Comanda - Bevande
+INSERT INTO Contenuto_Comanda (id_comanda, nome_portata, quantità)
+VALUES 
+  (1, 'Pilsner Light 33cl', 2),
+  (2, 'Acqua Naturale 33cl', 2),
+  (3, 'Coca-Cola 33cl', 2),
+  (4, 'Pilsner Light 50cl', 4),
+  (5, 'Fanta 33cl', 4),
+  (6, 'Pilsner Light 50cl', 4),
+  (7, 'Coca-Cola 33cl', 4),
+  (8, 'Fanta 33cl', 4),
+  (9, 'Acqua Naturale 33cl', 2),
+  (10, 'Pilsner Light 50cl', 4),
+  (11, 'Coca-Cola 33cl', 4),
+  (12, 'Pilsner Light 33cl', 2),
+  (13, 'Fanta 33cl', 2),
+  (14, 'Pilsner Light 50cl', 4),
+  (15, 'Acqua Naturale 33cl', 2),
+  (16, 'Coca-Cola 33cl', 2),
+  (17, 'Pilsner Light 50cl', 4),
+  (18, 'Acqua Frizzante 33cl', 2),
+  (19, 'Fanta 33cl', 2),
+  (20, 'Coca-Cola 50cl', 4),
+  (21, 'Pilsner Light 50cl', 4),
+  (22, 'Acqua Naturale 33cl', 2),
+  (23, 'Fanta 50cl', 4),
+  (24, 'Pilsner Light 33cl', 2),
+  (25, 'Coca-Cola 33cl', 2),
+  (26, 'Weiss Sun 50cl', 4),
+  (27, 'Stout Dream 50cl', 4);
+
+
+-- Insert Magazzino data
+INSERT INTO Magazzino (piano)
+VALUES 
+  (1),  -- First floor
+  (2);  -- Second floor
+
+-- Insert Stock data with fixed quantities
+INSERT INTO Stock (nome_ingrediente, quantità_stock, id_magazzino)
+VALUES 
+  -- Burger ingredients
+  ('Hamburger di manzo', 50.0, 1),
+  ('Insalata', 30.0, 1),
+  ('Pomodoro', 40.0, 1),
+  ('Cheddar', 25.0, 1),
+  ('Salsa speciale', 20.0, 1),
+  ('Burger vegetariano', 30.0, 1),
+  ('Wurstel di maiale', 40.0, 1),
+  ('Senape', 15.0, 1),
+  ('Ketchup', 15.0, 1),
+
+  -- Beer ingredients
+  ('Birra Pilsner alla spina', 200.0, 2),
+  ('Birra Stout alla spina', 150.0, 2),
+  ('Birra Weiss alla spina', 180.0, 2),
+
+  -- Soft drink ingredients
+  ('Coca-Cola alla spina', 250.0, 2),
+  ('Fanta alla spina', 200.0, 2),
+
+  -- Water
+  ('Acqua naturale 33cl', 300.0, 1),
+  ('Acqua frizzante 33cl', 300.0, 1);
+  
+
+
+
+
+

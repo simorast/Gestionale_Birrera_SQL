@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Creazione Comanda</title>
+	<link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+	<div class="inserisci_portate">
+		<h1>Creazione Comanda</h1>
+		<form method="POST">
+			Id_dipendente:<br>
+			<input type="number" name="id_dipendente" required><br><br>
+			Numero Tavolo:<br>
+			<input type="number" name="numero_tavolo" required><br><br>
+
+			Portate:<br>
+			<p>
+				<label>Classic Burger - €8,00</label><br>
+				<input type="number" name="classic_burger_qty" min="0"><br><br>
+			</p>
+			<p>
+				<label>Veggie Dream - €7,50</label><br>
+				<input type="number" name="veggie_dream_qty" min="0"><br><br>
+			</p>
+			<p>
+				<label>Classic Dog - €6,50</label><br>
+				<input type="number" name="classic_dog_qty" min="0"><br><br>
+			</p>
+			<p>
+				<label>Patatine Classiche - €4,00</label><br>
+				<input type="number" name="patatine_classiche_qty" min="0"><br><br>
+			</p>
+
+			<!-- Birre -->
+			<p>
+				<label>Birra Pilsner alla spina:</label><br>
+				<select name="pilsner_quantita">
+					<option value="">Seleziona formato</option>
+					<option value="33cl">33cl - €4,50</option>
+					<option value="50cl">50cl - €5,50</option>
+				</select>
+				Quantità: 
+				<input type="number" name="pilsner_light_qty" min="0"><br><br>
+			</p>
+
+			<p>
+				<label>Birra Stout alla spina:</label><br>
+				<select name="stout_quantita">
+					<option value="">Seleziona formato</option>
+					<option value="33cl">33cl - €6,00</option>
+					<option value="50cl">50cl - €7,00</option>
+				</select>
+				Quantità: 
+				<input type="number" name="stout_dream_qty" min="0"><br><br>
+			</p>
+
+			<p>
+				<label>Birra Weiss alla spina:</label><br>
+				<select name="weiss_quantita">
+					<option value="">Seleziona formato</option>
+					<option value="33cl">33cl - €5,50</option>
+					<option value="50cl">50cl - €6,50</option>
+				</select>
+				Quantità: 
+				<input type="number" name="weiss_sun_qty" min="0"><br><br>
+			</p>
+
+			<!-- Bevande Analcoliche -->
+			<p>
+				<label>Coca-Cola:</label><br>
+				<select name="coca_cola_quantita">
+					<option value="">Seleziona formato</option>
+					<option value="33cl">33cl - €2,50</option>
+					<option value="50cl">50cl - €3,50</option>
+				</select>
+				Quantità: 
+				<input type="number" name="coca_cola_qty" min="0"><br><br>
+			</p>
+
+			<p>
+				<label>Fanta:</label><br>
+				<select name="fanta_quantita">
+					<option value="">Seleziona formato</option>
+					<option value="33cl">33cl - €2,50</option>
+					<option value="50cl">50cl - €3,50</option>
+				</select>
+				Quantità: 
+				<input type="number" name="fanta_qty" min="0"><br><br>
+			</p>
+
+			<!-- Acqua -->
+			<p>
+				<label>Acqua naturale 33cl - €1,50:</label><br>
+				Quantità: 
+				<input type="number" name="acqua_naturale_qty" min="0"><br><br>
+			</p>
+
+			<p>
+				<label>Acqua frizzante 33cl - €1,50:</label><br>
+				Quantità: 
+				<input type="number" name="acqua_frizzante_qty" min="0"><br><br>
+			</p>
+
+			<!-- Pulsante di invio -->
+			<button onclick="alert('comanda elaborata')"class="button1">Crea Comanda</button>
+		</form>
+		<table>
+		<tr class="row2">
+			<td class="col2">
+				<td class="col2"><a href="lista_comande"><button type="button" class="button1">Indietro</button></a></td>
+			</td>
+		</tr>
+		</table>
+	</div>
+</body>
+</html>

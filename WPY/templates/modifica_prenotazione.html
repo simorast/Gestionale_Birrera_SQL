@@ -1,0 +1,48 @@
+<!-- modifica_prenotazione.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Modifica Prenotazione</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <h1>Modifica Prenotazione</h1>
+	
+    <div>
+        <p><strong>ID Prenotazione:</strong> {{ prenotazione.id_prenotazione }}</p>
+        <p><strong>Tavolo Attuale:</strong> {{ prenotazione.id_tavolo }} ({{ prenotazione.tipo }}, {{ prenotazione.capienza }} posti)</p>
+    </div>
+    <form action="/modifica_prenotazione/{{ prenotazione.id_prenotazione }}" method="post">
+		Id_dipendente:<br>
+		<input type="number" name="id_dipendente" required><br><br>
+        <div>
+            <label for="numero_persone">Numero di Persone:</label>
+            <input type="number" id="numero_persone" name="numero_persone" 
+                   min="1" max="8" value="{{ prenotazione.numero_persone }}" required>
+        </div>
+        
+        <div> <! - datetime-local mostra un selettore di data e ora ->
+            <label for="data_ora">Data e Ora:</label>
+            <input type="datetime-local" id="data_ora" name="data_ora" 
+                   value="{{ prenotazione.data_ora.strftime('%Y-%m-%dT%H:%M') }}" required>
+        </div>
+        
+        <div>
+            <label for="tipo_zona">Preferenza Zona:</label>
+            <select id="tipo_zona" name="tipo_zona">
+                <option value="dentro" {% if prenotazione.tipo == 'dentro' %}selected{% endif %}>Interno</option>
+                <option value="fuori" {% if prenotazione.tipo == 'fuori' %}selected{% endif %}>Esterno</option>
+            </select>
+        </div>
+		<button onclick="alert('prenotazione elaborata')"class="button1">Aggiorna Prenotazione</button>
+    </form>
+    <table class="table2">
+    <tr class="row2">
+        <td class="col2">
+			<a href="/lista_prenotazioni"><button type="button" class="button1">Indietro</button></a>
+        </td>
+    </tr>
+    </table>
+</body>
+</html>

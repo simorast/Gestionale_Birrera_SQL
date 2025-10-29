@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Modifica Comanda</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="inserisci_portate">
+        <h1>Modifica Comanda</h1>
+		
+		<! - url_for('aggiorna_comanda') genera l'URL relativo alla funzione aggiorna_comanda nel backend ->
+		<! - L'attributo action specifica il percorso a cui inviare i dati del modulo quando viene inviato ->
+        <form action="{{ url_for('aggiorna_comanda') }}" method="POST">
+			Id_dipendente:<br>
+			<input type="number" name="id_dipendente" required><br><br>
+            <input type="hidden" name="id_comanda" value="{{ ordine.id_comanda }}">
+		<! - permette di inviare id comanda al server->        
+            <div>
+                <label>Numero Tavolo:</label>
+                <input type="number" name="numero_tavolo" value="{{ ordine.id_tavolo }}" required>
+            </div>
+            
+            <h2>Burger</h2>
+            <div>
+                <label>Classic Burger:</label> <! - get cerca la chiave e se esiste riporta la quantità oppure default 0->
+                <input type="number" name="classic_burger_qty" value="{{ ordine.portate.get('Classic Burger', 0) }}" min="0">
+            </div>
+            <div>
+                <label>Veggie Dream:</label>
+                <input type="number" name="veggie_dream_qty" value="{{ ordine.portate.get('Veggie Dream', 0) }}" min="0">
+            </div>
+            <div>
+                <label>Classic Dog:</label>
+                <input type="number" name="classic_dog_qty" value="{{ ordine.portate.get('Classic Dog', 0) }}" min="0">
+            </div>
+            <div>
+                <label>Patatine Classiche:</label>
+                <input type="number" name="patatine_classiche_qty" value="{{ ordine.portate.get('Classiche', 0) }}" min="0">
+            </div>
+            
+            <h2>Birre</h2>
+            <div>
+                <label>Pilsner Light:</label>
+                <select name="pilsner_quantita">
+                    <option value="">Seleziona</option> <! - se il tipo di birra è gia stato scelto lo preseleziono->
+                    <option value="33cl" {% if ordine.portate.get('Pilsner Light 33cl') %}selected{% endif %}>33cl</option>
+                    <option value="50cl" {% if ordine.portate.get('Pilsner Light 50cl') %}selected{% endif %}>50cl</option>
+                </select>
+                <input type="number" name="pilsner_light_qty" value="{{ ordine.portate.get('Pilsner Light 33cl', ordine.portate.get('Pilsner Light 50cl', 0)) }}" min="0">
+            </div> <! - Se la chiave 'Pilsner Light 33cl' non esiste, cerca la quantità della "Pilsner Light 50cl"->
+            
+            <div>
+                <label>Stout Dream:</label>
+                <select name="stout_quantita">
+                    <option value="">Seleziona</option>
+                    <option value="33cl" {% if ordine.portate.get('Stout Dream 33cl') %}selected{% endif %}>33cl</option>
+                    <option value="50cl" {% if ordine.portate.get('Stout Dream 50cl') %}selected{% endif %}>50cl</option>
+                </select>
+                <input type="number" name="stout_dream_qty" value="{{ ordine.portate.get('Stout Dream 33cl', ordine.portate.get('Stout Dream 50cl', 0)) }}" min="0">
+            </div>
+            
+            <div>
+                <label>Weiss Sun:</label>
+                <select name="weiss_quantita">
+                    <option value="">Seleziona</option>
+                    <option value="33cl" {% if ordine.portate.get('Weiss Sun 33cl') %}selected{% endif %}>33cl</option>
+                    <option value="50cl" {% if ordine.portate.get('Weiss Sun 50cl') %}selected{% endif %}>50cl</option>
+                </select>
+                <input type="number" name="weiss_sun_qty" value="{{ ordine.portate.get('Weiss Sun 33cl', ordine.portate.get('Weiss Sun 50cl', 0)) }}" min="0">
+            </div>
+            
+            <h2>Soft Drink</h2>
+            <div>
+                <label>Coca-Cola:</label>
+                <select name="coca_cola_quantita">
+                    <option value="">Seleziona</option>
+                    <option value="33cl" {% if ordine.portate.get('Coca-Cola 33cl') %}selected{% endif %}>33cl</option>
+                    <option value="50cl" {% if ordine.portate.get('Coca-Cola 50cl') %}selected{% endif %}>50cl</option>
+                </select>
+                <input type="number" name="coca_cola_qty" value="{{ ordine.portate.get('Coca-Cola 33cl', ordine.portate.get('Coca-Cola 50cl', 0)) }}" min="0">
+            </div>
+            
+            <div>
+                <label>Fanta:</label>
+                <select name="fanta_quantita">
+                    <option value="">Seleziona</option>
+                    <option value="33cl" {% if ordine.portate.get('Fanta 33cl') %}selected{% endif %}>33cl</option>
+                    <option value="50cl" {% if ordine.portate.get('Fanta 50cl') %}selected{% endif %}>50cl</option>
+                </select>
+                <input type="number" name="fanta_qty" value="{{ ordine.portate.get('Fanta 33cl', ordine.portate.get('Fanta 50cl', 0)) }}" min="0">
+            </div>
+            
+            <h2>Acqua</h2>
+            <div>
+                <label>Acqua Naturale:</label>
+                <input type="number" name="acqua_naturale_qty" value="{{ ordine.portate.get('Acqua Naturale 33cl', 0) }}" min="0">
+            </div>
+            <div>
+                <label>Acqua Frizzante:</label>
+                <input type="number" name="acqua_frizzante_qty" value="{{ ordine.portate.get('Acqua Frizzante 33cl', 0) }}" min="0">
+            </div>
+            <br>
+            <div>
+                <button onclick="alert('comanda elaborata')"class="button1">Crea Comanda</button>
+            </div>
+            <div><br>
+                <a href="/lista_comande" class="button1">Indietro</a>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

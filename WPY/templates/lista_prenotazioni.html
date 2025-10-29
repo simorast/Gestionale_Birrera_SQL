@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Prenotazioni</title>
+    <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+	<table class="table2">
+    <tr class="row2">
+        <td class="col2"><a href="\"><button type="button" class="button1">Indietro</button></a></td>
+    </tr>
+    </table>
+    <h1>Elenco Prenotazioni</h1>
+    <table class="table1">
+    <thead>
+    <tr>
+		<th>ID PRENOTAZIONE</th>
+		<th>DATA E ORA</th>
+		<th>ID TAVOLO</th>
+		<th>NUMERO PERSONE</th>
+		<th>ID DIPENDENTE</th>
+		<th><a href="{{ url_for('crea_prenotazione') }}"><img src="{{ url_for('static', filename='img/aggiungi.png' ) }}" title="Aggiungi"/></a></th>
+    </tr>
+	</thead>
+    <tbody>
+		{% for prenotazione in prenotazioni %}
+		<tr>
+            <td> {{ prenotazione.id_prenotazione }} </td > 
+			<td> {{ prenotazione.data_ora }} </td> 
+			<td> {{ prenotazione.id_tavolo }} </td> 
+			<td> {{ prenotazione.numero_persone }} </td> 
+			<td> {{ prenotazione.id_dipendente }} </td> 
+            <td> 
+
+				<a href="{{ url_for('modifica_prenotazione', id_prenotazione=prenotazione.id_prenotazione) }}"> 
+					<img src="{{ url_for('static', filename='img/modifica.png' ) }}" title="Modifica"/> 
+				</a>
+				<form style="display:none" id="elimina_{{prenotazione.id_prenotazione}}" method="post" action="{{ url_for('elimina_prenotazione') }}">
+					<input name="id_prenotazione" type="text" value={{ prenotazione.id_prenotazione }} />
+				</form>
+				<button type="submit" form="elimina_{{prenotazione.id_prenotazione}}"> 
+					<img src="{{ url_for('static', filename='img/elimina.png' ) }}" title="Elimina" /> 
+				</button>
+			</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    </table>
+</body>
+</html>
